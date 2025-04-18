@@ -52,6 +52,11 @@ function extractPlacemarks(kmlDoc) {
     
     for (let i = 0; i < placemarksElements.length; i++) {
         const placemark = placemarksElements[i];
+        // Skip placemarks that are inside folders - we'll get those separately
+        if (placemark.parentElement && placemark.parentElement.tagName === "Folder") {
+            continue;
+        }
+        
         const placemarkObj = {
             id: placemark.getAttribute("id") || null,
             name: getElementValue(placemark, "name"),
@@ -145,6 +150,20 @@ function extractFolders(kmlDoc) {
                     const linearRing = outerBoundary.getElementsByTagName("LinearRing")[0];
                     if (linearRing) {
                         placemarkObj.coordinates = parseCoordinates(getElementValue(linearRing, "coordinates"));
+                    }
+                }
+                
+                // Handle inner boundaries (holes in polygons)
+                const innerBoundaries = polygon.getElementsByTagName("innerBoundaryIs");
+                if (innerBoundaries.length > 0) {
+                    placemarkObj.innerBoundaries = [];
+                    for (let k = 0; k < innerBoundaries.length; k++) {
+                        const linearRing = innerBoundaries[k].getElementsByTagName("LinearRing")[0];
+                        if (linearRing) {
+                            placemarkObj.innerBoundaries.push(
+                                parseCoordinates(getElementValue(linearRing, "coordinates"))
+                            );
+                        }
                     }
                 }
             }
@@ -319,6 +338,35 @@ function countPolygons(kmlData) {
     if (kmlData.folders) {
         kmlData.folders.forEach(folder => {
             if (folder.placemarks) {
+                folder.placemarks.forEach(placemark => {
+                    if (placemark.type === "Polygon") {
+                        count++;
+                    }
+                });
+            }
+        });
+    }
+    
+    return count;
+}
+
+// Helper function to count polygons in specific folders
+function countPolygonsInFolders(kmlData, folderIds) {
+    let count = 0;
+    
+    // Count standalone placemarks if 'standalone' is in folderIds
+    if (folderIds.includes('standalone') && kmlData.placemarks) {
+        kmlData.placemarks.forEach(placemark => {
+            if (placemark.type === "Polygon") {
+                count++;
+            }
+        });
+    }
+    
+    // Count placemarks inside selected folders
+    if (kmlData.folders) {
+        kmlData.folders.forEach((folder, index) => {
+            if (folderIds.includes(`folder-${index}`) && folder.placemarks) {
                 folder.placemarks.forEach(placemark => {
                     if (placemark.type === "Polygon") {
                         count++;
