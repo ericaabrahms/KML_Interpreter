@@ -1,12 +1,59 @@
-<html>
-    <head></head>
-    <body>
-        <h1>This interprets KML and turns it into a javascript object</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KML Polygon to Line Segments Converter</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <h1>KML Polygon to Line Segments Converter</h1>
+    <p>This tool processes KML files and generates line segments for each polygon, with each line segment title showing its length in feet.</p>
+    
+    <div class="container">
+        <div class="input-section">
+            <h2>Input</h2>
+            
+            <div class="file-input-wrapper">
+                <label for="fileInput">Select a KML file:</label><br>
+                <input type="file" id="fileInput" accept=".kml">
+            </div>
+            
+            <div id="dropZone">
+                <p>Or drag and drop a KML file here</p>
+            </div>
+            
+            <div id="processingInfo"></div>
+        </div>
+        
+        <div class="output-section">
+            <h2>Output</h2>
+            
+            <div class="tabs">
+                <div class="tab active" data-tab="newKml">Line Segments KML</div>
+                <div class="tab" data-tab="original">Original KML</div>
+                <div class="tab" data-tab="json">Parsed JSON</div>
+            </div>
+            
+            <div id="newKmlTab" class="tab-content">
+                <pre id="kmlOutput" class="output-container">Processed KML with line segments will appear here.</pre>
+                <button id="downloadKml" class="download-button">Download Line Segments KML</button>
+            </div>
+            
+            <div id="originalTab" class="tab-content" style="display: none;">
+                <pre id="originalKmlOutput" class="output-container">Original KML will appear here.</pre>
+            </div>
+            
+            <div id="jsonTab" class="tab-content" style="display: none;">
+                <pre id="jsonOutput" class="output-container">Parsed JSON will appear here.</pre>
+            </div>
+        </div>
+    </div>
 
-        <label for="fileInput">Got any KML for me to interpret?</label>
-        <input id="fileInput" type="file">
-
-    </body>
-    <script src="app/kml_interpreter.js"></script>
-    <script src="index.js"></script>
+    <!-- Scripts -->
+    <script src="js/kml-parser.js"></script>
+    <script src="js/line-generator.js"></script>
+    <script src="js/kml-writer.js"></script>
+    <script src="js/main.js"></script>
+</body>
 </html>

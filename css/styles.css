@@ -1,0 +1,78 @@
+body {
+    font-family: Arial, sans-serif;
+    line-height: 1.6;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 20px;
+}
+.container {
+    display: flex;
+    gap: 20px;
+}
+.input-section, .output-section {
+    flex: 1;
+}
+#dropZone {
+    border: 2px dashed #ccc;
+    border-radius: 5px;
+    padding: 25px;
+    text-align: center;
+    margin: 20px 0;
+    transition: all 0.3s;
+}
+#dropZone.active {
+    border-color: #0078d7;
+    background-color: rgba(0, 120, 215, 0.05);
+}
+.output-container {
+    white-space: pre-wrap;
+    background-color: #f5f5f5;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    padding: 15px;
+    overflow: auto;
+    max-height: 600px;
+    margin-top: 20px;
+}
+.file-input-wrapper {
+    margin: 20px 0;
+}
+button {
+    background-color: #0078d7;
+    color: white;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-top: 10px;
+}
+button:hover {
+    background-color: #005a9e;
+}
+.tabs {
+    display: flex;
+    margin-bottom: 10px;
+}
+.tab {
+    padding: 8px 15px;
+    cursor: pointer;
+    border: 1px solid #ddd;
+    background-color: #f5f5f5;
+    margin-right: 5px;
+    border-radius: 4px 4px 0 0;
+}
+.tab.active {
+    background-color: #0078d7;
+    color: white;
+    border-color: #0078d7;
+}
+#kmlOutput, #jsonOutput, #originalKmlOutput {
+    min-height: 300px;
+}
+.download-button {
+    margin-top: 10px;
+}
+#processingInfo {
+    margin-top: 10px;
+    font-style: italic;
+}
