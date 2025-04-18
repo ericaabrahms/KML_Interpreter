@@ -1,0 +1,950 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KML Polygon to Line Segments Converter</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .input-section, .output-section {
+            flex: 1;
+        }
+        #dropZone {
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 25px;
+            text-align: center;
+            margin: 20px 0;
+            transition: all 0.3s;
+        }
+        #dropZone.active {
+            border-color: #0078d7;
+            background-color: rgba(0, 120, 215, 0.05);
+        }
+        .output-container {
+            white-space: pre-wrap;
+            background-color: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+            overflow: auto;
+            max-height: 600px;
+            margin-top: 20px;
+        }
+        .file-input-wrapper {
+            margin: 20px 0;
+        }
+        button {
+            background-color: #0078d7;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background-color: #005a9e;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 10px;
+        }
+        .tab {
+            padding: 8px 15px;
+            cursor: pointer;
+            border: 1px solid #ddd;
+            background-color: #f5f5f5;
+            margin-right: 5px;
+            border-radius: 4px 4px 0 0;
+        }
+        .tab.active {
+            background-color: #0078d7;
+            color: white;
+            border-color: #0078d7;
+        }
+        #kmlOutput, #jsonOutput, #originalKmlOutput {
+            min-height: 300px;
+        }
+        .download-button {
+            margin-top: 10px;
+        }
+        #processingInfo {
+            margin-top: 10px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>KML Polygon to Line Segments Converter</h1>
+    <p>This tool processes KML files and generates line segments for each polygon, with each line segment title showing its length.</p>
+    
+    <div class="container">
+        <div class="input-section">
+            <h2>Input</h2>
+            
+            <div class="file-input-wrapper">
+                <label for="fileInput">Select a KML file:</label><br>
+                <input type="file" id="fileInput" accept=".kml">
+            </div>
+            
+            <div id="dropZone">
+                <p>Or drag and drop a KML file here</p>
+            </div>
+            
+            <div id="processingInfo"></div>
+        </div>
+        
+        <div class="output-section">
+            <h2>Output</h2>
+            
+            <div class="tabs">
+                <div class="tab active" data-tab="newKml">New KML</div>
+                <div class="tab" data-tab="original">Original KML</div>
+                <div class="tab" data-tab="json">Parsed JSON</div>
+            </div>
+            
+            <div id="newKmlTab" class="tab-content">
+                <pre id="kmlOutput" class="output-container">Processed KML will appear here.</pre>
+                <button id="downloadKml" class="download-button">Download New KML</button>
+            </div>
+            
+            <div id="originalTab" class="tab-content" style="display: none;">
+                <pre id="originalKmlOutput" class="output-container">Original KML will appear here.</pre>
+            </div>
+            
+            <div id="jsonTab" class="tab-content" style="display: none;">
+                <pre id="jsonOutput" class="output-container">Parsed JSON will appear here.</pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * KML Parser Script
+         */
+
+        // Function to parse KML file
+        async function parseKML(kmlFile) {
+            try {
+                // Read the KML file
+                const kmlText = await readKMLFile(kmlFile);
+                
+                // Parse XML
+                const parser = new DOMParser();
+                const kmlDoc = parser.parseFromString(kmlText, "text/xml");
+                
+                // Extract data
+                const result = {
+                    placemarks: extractPlacemarks(kmlDoc),
+                    folders: extractFolders(kmlDoc),
+                    groundOverlays: extractGroundOverlays(kmlDoc),
+                    styles: extractStyles(kmlDoc),
+                    networkLinks: extractNetworkLinks(kmlDoc),
+                    originalKml: kmlText
+                };
+                
+                return result;
+            } catch (error) {
+                console.error("Error parsing KML:", error);
+                throw error;
+            }
+        }
+
+        // Function to read KML file
+        async function readKMLFile(file) {
+            // If file is a File object
+            if (file instanceof File) {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => resolve(event.target.result);
+                    reader.onerror = (error) => reject(error);
+                    reader.readAsText(file);
+                });
+            } else {
+                throw new Error("Unsupported input format");
+            }
+        }
+
+        // Extract placemarks from KML
+        function extractPlacemarks(kmlDoc) {
+            const placemarks = [];
+            const placemarksElements = kmlDoc.getElementsByTagName("Placemark");
+            
+            for (let i = 0; i < placemarksElements.length; i++) {
+                const placemark = placemarksElements[i];
+                const placemarkObj = {
+                    id: placemark.getAttribute("id") || null,
+                    name: getElementValue(placemark, "name"),
+                    description: getElementValue(placemark, "description"),
+                    styleUrl: getElementValue(placemark, "styleUrl"),
+                    coordinates: []
+                };
+                
+                // Extract coordinates based on geometry type
+                const point = placemark.getElementsByTagName("Point")[0];
+                const lineString = placemark.getElementsByTagName("LineString")[0];
+                const polygon = placemark.getElementsByTagName("Polygon")[0];
+                
+                if (point) {
+                    placemarkObj.type = "Point";
+                    placemarkObj.coordinates = parseCoordinates(getElementValue(point, "coordinates"));
+                } else if (lineString) {
+                    placemarkObj.type = "LineString";
+                    placemarkObj.coordinates = parseCoordinates(getElementValue(lineString, "coordinates"));
+                } else if (polygon) {
+                    placemarkObj.type = "Polygon";
+                    const outerBoundary = polygon.getElementsByTagName("outerBoundaryIs")[0];
+                    if (outerBoundary) {
+                        const linearRing = outerBoundary.getElementsByTagName("LinearRing")[0];
+                        if (linearRing) {
+                            placemarkObj.coordinates = parseCoordinates(getElementValue(linearRing, "coordinates"));
+                        }
+                    }
+                    
+                    // Handle inner boundaries (holes in polygons)
+                    const innerBoundaries = polygon.getElementsByTagName("innerBoundaryIs");
+                    if (innerBoundaries.length > 0) {
+                        placemarkObj.innerBoundaries = [];
+                        for (let j = 0; j < innerBoundaries.length; j++) {
+                            const linearRing = innerBoundaries[j].getElementsByTagName("LinearRing")[0];
+                            if (linearRing) {
+                                placemarkObj.innerBoundaries.push(
+                                    parseCoordinates(getElementValue(linearRing, "coordinates"))
+                                );
+                            }
+                        }
+                    }
+                }
+                
+                placemarks.push(placemarkObj);
+            }
+            
+            return placemarks;
+        }
+
+        // Extract folders from KML
+        function extractFolders(kmlDoc) {
+            const folders = [];
+            const folderElements = kmlDoc.getElementsByTagName("Folder");
+            
+            for (let i = 0; i < folderElements.length; i++) {
+                const folder = folderElements[i];
+                const folderObj = {
+                    id: folder.getAttribute("id") || null,
+                    name: getElementValue(folder, "name"),
+                    description: getElementValue(folder, "description"),
+                    placemarks: []
+                };
+                
+                // Extract placemarks within this folder
+                const folderPlacemarks = folder.getElementsByTagName("Placemark");
+                for (let j = 0; j < folderPlacemarks.length; j++) {
+                    const placemark = folderPlacemarks[j];
+                    const placemarkObj = {
+                        id: placemark.getAttribute("id") || null,
+                        name: getElementValue(placemark, "name"),
+                        description: getElementValue(placemark, "description"),
+                        styleUrl: getElementValue(placemark, "styleUrl")
+                    };
+                    
+                    // Add geometry details simplified
+                    const point = placemark.getElementsByTagName("Point")[0];
+                    const lineString = placemark.getElementsByTagName("LineString")[0];
+                    const polygon = placemark.getElementsByTagName("Polygon")[0];
+                    
+                    if (point) {
+                        placemarkObj.type = "Point";
+                        placemarkObj.coordinates = parseCoordinates(getElementValue(point, "coordinates"));
+                    } else if (lineString) {
+                        placemarkObj.type = "LineString";
+                        placemarkObj.coordinates = parseCoordinates(getElementValue(lineString, "coordinates"));
+                    } else if (polygon) {
+                        placemarkObj.type = "Polygon";
+                        const outerBoundary = polygon.getElementsByTagName("outerBoundaryIs")[0];
+                        if (outerBoundary) {
+                            const linearRing = outerBoundary.getElementsByTagName("LinearRing")[0];
+                            if (linearRing) {
+                                placemarkObj.coordinates = parseCoordinates(getElementValue(linearRing, "coordinates"));
+                            }
+                        }
+                    }
+                    
+                    folderObj.placemarks.push(placemarkObj);
+                }
+                
+                folders.push(folderObj);
+            }
+            
+            return folders;
+        }
+
+        // Extract ground overlays
+        function extractGroundOverlays(kmlDoc) {
+            const overlays = [];
+            const overlayElements = kmlDoc.getElementsByTagName("GroundOverlay");
+            
+            for (let i = 0; i < overlayElements.length; i++) {
+                const overlay = overlayElements[i];
+                const overlayObj = {
+                    id: overlay.getAttribute("id") || null,
+                    name: getElementValue(overlay, "name"),
+                    description: getElementValue(overlay, "description"),
+                    icon: getElementValue(overlay, "Icon") ? getElementValue(overlay.getElementsByTagName("Icon")[0], "href") : null
+                };
+                
+                // Extract LatLonBox information
+                const latLonBox = overlay.getElementsByTagName("LatLonBox")[0];
+                if (latLonBox) {
+                    overlayObj.bounds = {
+                        north: parseFloat(getElementValue(latLonBox, "north")),
+                        south: parseFloat(getElementValue(latLonBox, "south")),
+                        east: parseFloat(getElementValue(latLonBox, "east")),
+                        west: parseFloat(getElementValue(latLonBox, "west")),
+                        rotation: parseFloat(getElementValue(latLonBox, "rotation") || 0)
+                    };
+                }
+                
+                overlays.push(overlayObj);
+            }
+            
+            return overlays;
+        }
+
+        // Extract styles
+        function extractStyles(kmlDoc) {
+            const styles = [];
+            const styleElements = kmlDoc.getElementsByTagName("Style");
+            
+            for (let i = 0; i < styleElements.length; i++) {
+                const style = styleElements[i];
+                const styleObj = {
+                    id: style.getAttribute("id") || null,
+                    iconStyle: {},
+                    lineStyle: {},
+                    polyStyle: {},
+                    labelStyle: {}
+                };
+                
+                // Extract IconStyle
+                const iconStyle = style.getElementsByTagName("IconStyle")[0];
+                if (iconStyle) {
+                    styleObj.iconStyle = {
+                        scale: parseFloat(getElementValue(iconStyle, "scale") || 1),
+                        icon: getElementValue(iconStyle, "Icon") ? 
+                            getElementValue(iconStyle.getElementsByTagName("Icon")[0], "href") : null
+                    };
+                    
+                    // Extract color if available
+                    const color = getElementValue(iconStyle, "color");
+                    if (color) {
+                        styleObj.iconStyle.color = color;
+                    }
+                }
+                
+                // Extract LineStyle
+                const lineStyle = style.getElementsByTagName("LineStyle")[0];
+                if (lineStyle) {
+                    styleObj.lineStyle = {
+                        color: getElementValue(lineStyle, "color"),
+                        width: parseFloat(getElementValue(lineStyle, "width") || 1)
+                    };
+                }
+                
+                // Extract PolyStyle
+                const polyStyle = style.getElementsByTagName("PolyStyle")[0];
+                if (polyStyle) {
+                    styleObj.polyStyle = {
+                        color: getElementValue(polyStyle, "color"),
+                        fill: getElementValue(polyStyle, "fill") !== "0",
+                        outline: getElementValue(polyStyle, "outline") !== "0"
+                    };
+                }
+                
+                // Extract LabelStyle
+                const labelStyle = style.getElementsByTagName("LabelStyle")[0];
+                if (labelStyle) {
+                    styleObj.labelStyle = {
+                        color: getElementValue(labelStyle, "color"),
+                        scale: parseFloat(getElementValue(labelStyle, "scale") || 1)
+                    };
+                }
+                
+                styles.push(styleObj);
+            }
+            
+            return styles;
+        }
+
+        // Extract network links
+        function extractNetworkLinks(kmlDoc) {
+            const links = [];
+            const linkElements = kmlDoc.getElementsByTagName("NetworkLink");
+            
+            for (let i = 0; i < linkElements.length; i++) {
+                const link = linkElements[i];
+                const linkObj = {
+                    id: link.getAttribute("id") || null,
+                    name: getElementValue(link, "name"),
+                    description: getElementValue(link, "description"),
+                    refreshVisibility: getElementValue(link, "refreshVisibility") === "1",
+                    flyToView: getElementValue(link, "flyToView") === "1"
+                };
+                
+                // Extract Link information
+                const linkInfo = link.getElementsByTagName("Link")[0];
+                if (linkInfo) {
+                    linkObj.href = getElementValue(linkInfo, "href");
+                    linkObj.refreshMode = getElementValue(linkInfo, "refreshMode");
+                    linkObj.refreshInterval = parseFloat(getElementValue(linkInfo, "refreshInterval") || 0);
+                    linkObj.viewRefreshMode = getElementValue(linkInfo, "viewRefreshMode");
+                    linkObj.viewRefreshTime = parseFloat(getElementValue(linkInfo, "viewRefreshTime") || 0);
+                }
+                
+                links.push(linkObj);
+            }
+            
+            return links;
+        }
+
+        // Helper function to parse coordinates
+        function parseCoordinates(coordinatesStr) {
+            if (!coordinatesStr) return [];
+            
+            return coordinatesStr.trim().split(/\s+/).map(coordSet => {
+                const [lon, lat, alt = 0] = coordSet.split(',').map(parseFloat);
+                return { lon, lat, alt };
+            });
+        }
+
+        // Helper function to get element value
+        function getElementValue(parent, tagName) {
+            const element = parent.getElementsByTagName(tagName)[0];
+            return element ? element.textContent : null;
+        }
+
+        /**
+         * KML Polygon to Line Segments Processor
+         */
+
+        // Function to process KML data and generate a new KML document
+        function processKMLPolygons(kmlData) {
+            // Create a new array to hold all line segments
+            const lineSegments = [];
+            
+            // Process all placemarks that are polygons
+            if (kmlData.placemarks && kmlData.placemarks.length > 0) {
+                kmlData.placemarks.forEach(placemark => {
+                    if (placemark.type === "Polygon" && placemark.coordinates && placemark.coordinates.length > 0) {
+                        // Generate line segments for this polygon
+                        const segments = createLineSegmentsFromPolygon(placemark);
+                        lineSegments.push(...segments);
+                    }
+                });
+            }
+            
+            // Process placemarks inside folders
+            if (kmlData.folders && kmlData.folders.length > 0) {
+                kmlData.folders.forEach(folder => {
+                    if (folder.placemarks && folder.placemarks.length > 0) {
+                        folder.placemarks.forEach(placemark => {
+                            if (placemark.type === "Polygon" && placemark.coordinates && placemark.coordinates.length > 0) {
+                                // Generate line segments for this polygon
+                                const segments = createLineSegmentsFromPolygon(placemark);
+                                lineSegments.push(...segments);
+                            }
+                        });
+                    }
+                });
+            }
+            
+            // Generate the new KML document
+            return generateKMLDocument(kmlData, lineSegments);
+        }
+
+        // Function to create line segments from polygon coordinates
+        function createLineSegmentsFromPolygon(polygon) {
+            const segments = [];
+            const coordinates = polygon.coordinates;
+            
+            // We need at least 2 points to form a line
+            if (coordinates.length < 2) {
+                return segments;
+            }
+            
+            // Create a line segment between each consecutive pair of points
+            for (let i = 0; i < coordinates.length - 1; i++) {
+                const startPoint = coordinates[i];
+                const endPoint = coordinates[i + 1];
+                
+                // Calculate the length of the line segment
+                const length = calculateDistance(startPoint, endPoint);
+                
+                // Create a new line segment placemark
+                segments.push({
+                    type: "LineString",
+                    name: `Line Segment ${i+1}: ${length.toFixed(2)} m`,
+                    description: `Line segment from ${polygon.name || 'Polygon'} with length ${length.toFixed(2)} meters`,
+                    coordinates: [startPoint, endPoint],
+                    originalPolygonId: polygon.id,
+                    originalPolygonName: polygon.name
+                });
+            }
+            
+            // Close the polygon by connecting the last point to the first point
+            if (coordinates.length > 2) {
+                const startPoint = coordinates[coordinates.length - 1];
+                const endPoint = coordinates[0];
+                
+                // Calculate the length of the closing line segment
+                const length = calculateDistance(startPoint, endPoint);
+                
+                // Create a new line segment placemark for the closing segment
+                segments.push({
+                    type: "LineString",
+                    name: `Line Segment ${coordinates.length}: ${length.toFixed(2)} m`,
+                    description: `Closing line segment from ${polygon.name || 'Polygon'} with length ${length.toFixed(2)} meters`,
+                    coordinates: [startPoint, endPoint],
+                    originalPolygonId: polygon.id,
+                    originalPolygonName: polygon.name
+                });
+            }
+            
+            return segments;
+        }
+
+        // Function to calculate distance between two points in meters
+        function calculateDistance(point1, point2) {
+            // Haversine formula to calculate distance between two points on Earth
+            const R = 6371000; // Earth's radius in meters
+            const lat1 = point1.lat * Math.PI / 180;
+            const lat2 = point2.lat * Math.PI / 180;
+            const deltaLat = (point2.lat - point1.lat) * Math.PI / 180;
+            const deltaLon = (point2.lon - point1.lon) * Math.PI / 180;
+            
+            const a = Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
+                    Math.cos(lat1) * Math.cos(lat2) *
+                    Math.sin(deltaLon/2) * Math.sin(deltaLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            const distance = R * c;
+            
+            return distance;
+        }
+
+        // Function to generate the final KML document
+        function generateKMLDocument(originalData, lineSegments) {
+            // Start building the KML document
+            let kmlContent = '<?xml version="1.0" encoding="UTF-8"?>\n';
+            kmlContent += '<kml xmlns="http://www.opengis.net/kml/2.2">\n';
+            kmlContent += '<Document>\n';
+            
+            // Add name and description if available
+            if (originalData.name) {
+                kmlContent += `  <name>${escapeXML(originalData.name)}</name>\n`;
+            } else {
+                kmlContent += '  <name>Processed KML with Line Segments</name>\n';
+            }
+            
+            if (originalData.description) {
+                kmlContent += `  <description>${escapeXML(originalData.description)}</description>\n`;
+            } else {
+                kmlContent += '  <description>This document contains the original data plus line segments for all polygons.</description>\n';
+            }
+            
+            // Add styles from original data
+            if (originalData.styles && originalData.styles.length > 0) {
+                originalData.styles.forEach(style => {
+                    kmlContent += addStyleToKML(style);
+                });
+            }
+            
+            // Add a new style for line segments
+            kmlContent += '  <Style id="lineSegmentStyle">\n';
+            kmlContent += '    <LineStyle>\n';
+            kmlContent += '      <color>ff0000ff</color>\n'; // Red lines
+            kmlContent += '      <width>3</width>\n';
+            kmlContent += '    </LineStyle>\n';
+            kmlContent += '  </Style>\n';
+            
+            // Add original placemarks
+            if (originalData.placemarks && originalData.placemarks.length > 0) {
+                originalData.placemarks.forEach(placemark => {
+                    kmlContent += addPlacemarkToKML(placemark);
+                });
+            }
+            
+            // Add original folders
+            if (originalData.folders && originalData.folders.length > 0) {
+                originalData.folders.forEach(folder => {
+                    kmlContent += addFolderToKML(folder);
+                });
+            }
+            
+            // Add a new folder for line segments
+            if (lineSegments.length > 0) {
+                kmlContent += '  <Folder>\n';
+                kmlContent += '    <name>Line Segments</name>\n';
+                kmlContent += '    <description>Generated line segments from polygons</description>\n';
+                
+                // Add all line segments
+                lineSegments.forEach(segment => {
+                    kmlContent += '    <Placemark>\n';
+                    kmlContent += `      <name>${escapeXML(segment.name)}</name>\n`;
+                    if (segment.description) {
+                        kmlContent += `      <description>${escapeXML(segment.description)}</description>\n`;
+                    }
+                    kmlContent += '      <styleUrl>#lineSegmentStyle</styleUrl>\n';
+                    kmlContent += '      <LineString>\n';
+                    kmlContent += '        <tessellate>1</tessellate>\n';
+                    kmlContent += '        <coordinates>\n';
+                    kmlContent += `          ${segment.coordinates.map(coord => `${coord.lon},${coord.lat},${coord.alt}`).join(' ')}\n`;
+                    kmlContent += '        </coordinates>\n';
+                    kmlContent += '      </LineString>\n';
+                    kmlContent += '    </Placemark>\n';
+                });
+                
+                kmlContent += '  </Folder>\n';
+            }
+            
+            // Close the document
+            kmlContent += '</Document>\n';
+            kmlContent += '</kml>';
+            
+            return kmlContent;
+        }
+
+        // Helper function to add a style to KML
+        function addStyleToKML(style) {
+            let styleContent = `  <Style id="${style.id || 'defaultStyle'}">\n`;
+            
+            // Add IconStyle if available
+            if (style.iconStyle && Object.keys(style.iconStyle).length > 0) {
+                styleContent += '    <IconStyle>\n';
+                if (style.iconStyle.color) {
+                    styleContent += `      <color>${style.iconStyle.color}</color>\n`;
+                }
+                if (style.iconStyle.scale) {
+                    styleContent += `      <scale>${style.iconStyle.scale}</scale>\n`;
+                }
+                if (style.iconStyle.icon) {
+                    styleContent += '      <Icon>\n';
+                    styleContent += `        <href>${escapeXML(style.iconStyle.icon)}</href>\n`;
+                    styleContent += '      </Icon>\n';
+                }
+                styleContent += '    </IconStyle>\n';
+            }
+            
+            // Add LineStyle if available
+            if (style.lineStyle && Object.keys(style.lineStyle).length > 0) {
+                styleContent += '    <LineStyle>\n';
+                if (style.lineStyle.color) {
+                    styleContent += `      <color>${style.lineStyle.color}</color>\n`;
+                }
+                if (style.lineStyle.width) {
+                    styleContent += `      <width>${style.lineStyle.width}</width>\n`;
+                }
+                styleContent += '    </LineStyle>\n';
+            }
+            
+            // Add PolyStyle if available
+            if (style.polyStyle && Object.keys(style.polyStyle).length > 0) {
+                styleContent += '    <PolyStyle>\n';
+                if (style.polyStyle.color) {
+                    styleContent += `      <color>${style.polyStyle.color}</color>\n`;
+                }
+                if (style.polyStyle.fill !== undefined) {
+                    styleContent += `      <fill>${style.polyStyle.fill ? 1 : 0}</fill>\n`;
+                }
+                if (style.polyStyle.outline !== undefined) {
+                    styleContent += `      <outline>${style.polyStyle.outline ? 1 : 0}</outline>\n`;
+                }
+                styleContent += '    </PolyStyle>\n';
+            }
+            
+            // Add LabelStyle if available
+            if (style.labelStyle && Object.keys(style.labelStyle).length > 0) {
+                styleContent += '    <LabelStyle>\n';
+                if (style.labelStyle.color) {
+                    styleContent += `      <color>${style.labelStyle.color}</color>\n`;
+                }
+                if (style.labelStyle.scale) {
+                    styleContent += `      <scale>${style.labelStyle.scale}</scale>\n`;
+                }
+                styleContent += '    </LabelStyle>\n';
+            }
+            
+            styleContent += '  </Style>\n';
+            return styleContent;
+        }
+
+        // Helper function to add a placemark to KML
+        function addPlacemarkToKML(placemark) {
+            let placemarkContent = '  <Placemark>\n';
+            
+            // Add ID if available
+            if (placemark.id) {
+                placemarkContent += `    id="${escapeXML(placemark.id)}"\n`;
+            }
+            
+            // Add name and description if available
+            if (placemark.name) {
+                placemarkContent += `    <name>${escapeXML(placemark.name)}</name>\n`;
+            }
+            
+            if (placemark.description) {
+                placemarkContent += `    <description>${escapeXML(placemark.description)}</description>\n`;
+            }
+            
+            // Add style URL if available
+            if (placemark.styleUrl) {
+                placemarkContent += `    <styleUrl>${escapeXML(placemark.styleUrl)}</styleUrl>\n`;
+            }
+            
+            // Add geometry based on type
+            if (placemark.type === "Point" && placemark.coordinates && placemark.coordinates.length > 0) {
+                const coord = placemark.coordinates[0];
+                placemarkContent += '    <Point>\n';
+                placemarkContent += `      <coordinates>${coord.lon},${coord.lat},${coord.alt}</coordinates>\n`;
+                placemarkContent += '    </Point>\n';
+            } else if (placemark.type === "LineString" && placemark.coordinates && placemark.coordinates.length > 0) {
+                placemarkContent += '    <LineString>\n';
+                placemarkContent += '      <tessellate>1</tessellate>\n';
+                placemarkContent += '      <coordinates>\n';
+                placemarkContent += `        ${placemark.coordinates.map(coord => `${coord.lon},${coord.lat},${coord.alt}`).join(' ')}\n`;
+                placemarkContent += '      </coordinates>\n';
+                placemarkContent += '    </LineString>\n';
+            } else if (placemark.type === "Polygon" && placemark.coordinates && placemark.coordinates.length > 0) {
+                placemarkContent += '    <Polygon>\n';
+                placemarkContent += '      <tessellate>1</tessellate>\n';
+                placemarkContent += '      <outerBoundaryIs>\n';
+                placemarkContent += '        <LinearRing>\n';
+                placemarkContent += '          <coordinates>\n';
+                placemarkContent += `            ${placemark.coordinates.map(coord => `${coord.lon},${coord.lat},${coord.alt}`).join(' ')}\n`;
+                placemarkContent += '          </coordinates>\n';
+                placemarkContent += '        </LinearRing>\n';
+                placemarkContent += '      </outerBoundaryIs>\n';
+                
+                // Add inner boundaries if available
+                if (placemark.innerBoundaries && placemark.innerBoundaries.length > 0) {
+                    placemark.innerBoundaries.forEach(boundary => {
+                        placemarkContent += '      <innerBoundaryIs>\n';
+                        placemarkContent += '        <LinearRing>\n';
+                        placemarkContent += '          <coordinates>\n';
+                        placemarkContent += `            ${boundary.map(coord => `${coord.lon},${coord.lat},${coord.alt}`).join(' ')}\n`;
+                        placemarkContent += '          </coordinates>\n';
+                        placemarkContent += '        </LinearRing>\n';
+                        placemarkContent += '      </innerBoundaryIs>\n';
+                    });
+                }
+                
+                placemarkContent += '    </Polygon>\n';
+            }
+            
+            placemarkContent += '  </Placemark>\n';
+            return placemarkContent;
+        }
+
+        // Helper function to add a folder to KML
+        function addFolderToKML(folder) {
+            let folderContent = '  <Folder>\n';
+            
+            // Add ID if available
+            if (folder.id) {
+                folderContent += `    id="${escapeXML(folder.id)}"\n`;
+            }
+            
+            // Add name and description if available
+            if (folder.name) {
+                folderContent += `    <name>${escapeXML(folder.name)}</name>\n`;
+            }
+            
+            if (folder.description) {
+                folderContent += `    <description>${escapeXML(folder.description)}</description>\n`;
+            }
+            
+            // Add placemarks inside this folder
+            if (folder.placemarks && folder.placemarks.length > 0) {
+                folder.placemarks.forEach(placemark => {
+                    folderContent += addPlacemarkToKML(placemark).replace(/^  /gm, '    '); // Add extra indentation
+                });
+            }
+            
+            folderContent += '  </Folder>\n';
+            return folderContent;
+        }
+
+        // Helper function to escape XML special characters
+        function escapeXML(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&apos;');
+        }
+
+        // DOM interaction code
+        document.addEventListener('DOMContentLoaded', () => {
+            const fileInput = document.getElementById('fileInput');
+            const dropZone = document.getElementById('dropZone');
+            const kmlOutput = document.getElementById('kmlOutput');
+            const jsonOutput = document.getElementById('jsonOutput');
+            const originalKmlOutput = document.getElementById('originalKmlOutput');
+            const downloadKmlBtn = document.getElementById('downloadKml');
+            const processingInfo = document.getElementById('processingInfo');
+            const tabs = document.querySelectorAll('.tab');
+            let processedKml = null;
+            
+            // Function to process KML file
+            async function processKMLFile(file) {
+                try {
+                    processingInfo.textContent = "Processing KML file...";
+                    
+                    // Parse the KML file
+                    const kmlData = await parseKML(file);
+                    
+                    // Display original KML
+                    originalKmlOutput.textContent = kmlData.originalKml;
+                    
+                    // Display parsed JSON
+                    jsonOutput.textContent = JSON.stringify(kmlData, null, 2);
+                    
+                    // Process polygons to create line segments
+                    processedKml = processKMLPolygons(kmlData);
+                    
+                    // Display new KML
+                    kmlOutput.textContent = processedKml;
+                    
+                    // Count the polygons and line segments
+                    const polygonCount = countPolygons(kmlData);
+                    const lineSegmentCount = countLineSegments(processedKml);
+                    
+                    processingInfo.textContent = `Processed ${polygonCount} polygons and created ${lineSegmentCount} line segments.`;
+                    
+                    // Enable download button
+                    downloadKmlBtn.disabled = false;
+                } catch (error) {
+                    console.error("Error processing KML file:", error);
+                    processingInfo.textContent = `Error: ${error.message}`;
+                    kmlOutput.textContent = "An error occurred while processing the KML file.";
+                    jsonOutput.textContent = "An error occurred while processing the KML file.";
+                    originalKmlOutput.textContent = "An error occurred while processing the KML file.";
+                }
+            }
+            
+            // Helper function to count polygons in parsed KML data
+            function countPolygons(kmlData) {
+                let count = 0;
+                
+                // Count placemarks that are polygons
+                if (kmlData.placemarks) {
+                    kmlData.placemarks.forEach(placemark => {
+                        if (placemark.type === "Polygon") {
+                            count++;
+                        }
+                    });
+                }
+                
+                // Count placemarks inside folders
+                if (kmlData.folders) {
+                    kmlData.folders.forEach(folder => {
+                        if (folder.placemarks) {
+                            folder.placemarks.forEach(placemark => {
+                                if (placemark.type === "Polygon") {
+                                    count++;
+                                }
+                            });
+                        }
+                    });
+                }
+                
+                return count;
+            }
+            
+            // Helper function to count line segments in new KML
+            function countLineSegments(kmlString) {
+                // Quick and dirty way to count line segments
+                const matches = kmlString.match(/<name>Line Segment \d+:/g);
+                return matches ? matches.length : 0;
+            }
+            
+            // File input change handler
+            fileInput.addEventListener('change', (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    processKMLFile(file);
+                }
+            });
+            
+            // Drag and drop handlers
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('active');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('active');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('active');
+                
+                const file = e.dataTransfer.files[0];
+                if (file) {
+                    processKMLFile(file);
+                }
+            });
+            
+            // Tab switching
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    // Update tab active state
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    // Update content visibility
+                    const tabName = tab.getAttribute('data-tab');
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        content.style.display = 'none';
+                    });
+                    
+                    if (tabName === 'newKml') {
+                        document.getElementById('newKmlTab').style.display = 'block';
+                    } else if (tabName === 'original') {
+                        document.getElementById('originalTab').style.display = 'block';
+                    } else if (tabName === 'json') {
+                        document.getElementById('jsonTab').style.display = 'block';
+                    }
+                });
+            });
+            
+            // Download button handler
+            downloadKmlBtn.addEventListener('click', () => {
+                if (processedKml) {
+                    const blob = new Blob([processedKml], { type: 'application/vnd.google-earth.kml+xml' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'processed_with_line_segments.kml';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+            });
+        });
+    </script>
+</body>
+</html>
