@@ -26,12 +26,15 @@ function processKMLPolygons(kmlData, selectedFolderIds, logs) {
         kmlData.placemarks.forEach((placemark, index) => {
             if (placemark.type === "Polygon" && placemark.coordinates && placemark.coordinates.length > 0) {
                 stats.processedPolygons++;
-                // Generate line segments for this polygon
-                processPolygon(placemark, lineSegments, uniqueSegments, stats, logs, `Standalone-${index}`);
+                // Generate line segments for this polygon with folder info
+                processPolygon(placemark, lineSegments, uniqueSegments, stats, logs, `Standalone-${index}`, {
+                    folderName: 'Standalone Placemarks',
+                    folderId: 'standalone'
+                });
             }
         });
     }
-    
+
     // Process placemarks inside selected folders
     if (kmlData.folders && kmlData.folders.length > 0) {
         kmlData.folders.forEach((folder, folderIndex) => {
@@ -41,8 +44,11 @@ function processKMLPolygons(kmlData, selectedFolderIds, logs) {
                 folder.placemarks.forEach((placemark, placemarkIndex) => {
                     if (placemark.type === "Polygon" && placemark.coordinates && placemark.coordinates.length > 0) {
                         stats.processedPolygons++;
-                        // Generate line segments for this polygon
-                        processPolygon(placemark, lineSegments, uniqueSegments, stats, logs, `${folderName}-${placemarkIndex}`);
+                        // Generate line segments for this polygon with folder info
+                        processPolygon(placemark, lineSegments, uniqueSegments, stats, logs, `${folderName}-${placemarkIndex}`, {
+                            folderName: folderName,
+                            folderId: `folder-${folderIndex}`
+                        });
                     }
                 });
             }
@@ -56,7 +62,7 @@ function processKMLPolygons(kmlData, selectedFolderIds, logs) {
 }
 
 // Function to process a single polygon
-function processPolygon(polygon, lineSegments, uniqueSegments, stats, logs, identifierPrefix) {
+function processPolygon(polygon, lineSegments, uniqueSegments, stats, logs, identifierPrefix, folderInfo) {
     const coordinates = polygon.coordinates;
     
     // We need at least 2 points to form a line
@@ -71,7 +77,7 @@ function processPolygon(polygon, lineSegments, uniqueSegments, stats, logs, iden
         const endPoint = coordinates[i + 1];
         
         // Add line segment (if valid)
-        addLineSegment(startPoint, endPoint, polygon, lineSegments, uniqueSegments, stats, logs, `${identifierPrefix}-segment-${i+1}`);
+        addLineSegment(startPoint, endPoint, polygon, lineSegments, uniqueSegments, stats, logs, `${identifierPrefix}-segment-${i+1}`, folderInfo);
     }
     
     // Close the polygon by connecting the last point to the first point
@@ -80,12 +86,12 @@ function processPolygon(polygon, lineSegments, uniqueSegments, stats, logs, iden
         const endPoint = coordinates[0];
         
         // Add closing line segment (if valid)
-        addLineSegment(startPoint, endPoint, polygon, lineSegments, uniqueSegments, stats, logs, `${identifierPrefix}-segment-closing`);
+        addLineSegment(startPoint, endPoint, polygon, lineSegments, uniqueSegments, stats, logs, `${identifierPrefix}-segment-closing`, folderInfo);
     }
 }
 
 // Function to add a line segment if it's valid (non-zero length and not a duplicate)
-function addLineSegment(startPoint, endPoint, polygon, lineSegments, uniqueSegments, stats, logs, identifier) {
+function addLineSegment(startPoint, endPoint, polygon, lineSegments, uniqueSegments, stats, logs, identifier, folderInfo) {
     // Calculate the length of the line segment in meters
     const lengthInMeters = calculateDistance(startPoint, endPoint);
     
@@ -122,10 +128,10 @@ function addLineSegment(startPoint, endPoint, polygon, lineSegments, uniqueSegme
         name: `${Math.round(lengthInFeet)}'`,
         coordinates: [startPoint, endPoint],
         originalPolygonId: polygon.id,
-        originalPolygonName: polygon.name
+        originalPolygonName: polygon.name || "Unnamed Polygon",
+        folderInfo: folderInfo  // Store folder information
     });
 }
-
 // Function to create a unique key for a segment based on coordinates
 function getSegmentKey(point1, point2) {
     // Sort points to ensure the same segment in reverse direction gets the same key
