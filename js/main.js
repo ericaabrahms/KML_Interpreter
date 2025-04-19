@@ -17,6 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const statsInfo = document.getElementById('statsInfo');
     const processSelectedBtn = document.getElementById('processSelectedBtn');
     const tabs = document.querySelectorAll('.tab');
+    const downloadCsvBtn = document.getElementById('downloadCsv');
     
     // State
     let parsedKmlData = null;
@@ -131,6 +132,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 processingInfo.textContent = "Processing complete, but no line segments were generated.";
                 statsInfo.textContent = "";
             }
+
+            const csvContent = generateCSV(lineSegments, parsedKmlData, selectedFolderIds);
+
+            // Enable CSV download button
+            if (lineSegments.length > 0) {
+                downloadCsvBtn.disabled = false;
+                // Store CSV content for download
+                window.csvContent = csvContent;
+            } else {
+                downloadCsvBtn.disabled = true;
+            }
             
         } catch (error) {
             console.error("Error processing folders:", error);
@@ -230,6 +242,21 @@ document.addEventListener('DOMContentLoaded', () => {
     downloadKmlBtn.addEventListener('click', () => {
         if (processedKml) {
             downloadKmlFile(processedKml, 'line_segments.kml');
+        }
+    });
+
+    // CSV download button handler
+    downloadCsvBtn.addEventListener('click', () => {
+        if (window.csvContent) {
+            const blob = new Blob([window.csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'line_segments.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
         }
     });
 });
