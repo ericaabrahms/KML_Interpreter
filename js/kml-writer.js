@@ -46,15 +46,19 @@ function generateSingleKMLDocument(lineSegments, title) {
     kmlContent += `  <name>${escapeXML(title)}</name>\n`;
     kmlContent += '  <description>Generated line segments from polygons with lengths in feet</description>\n';
     
-    // Add a style for line segments
+    // Add styles for line segments with different label visibility settings
     kmlContent += '  <Style id="lineSegmentStyle">\n';
     kmlContent += '    <LineStyle>\n';
     kmlContent += '      <color>ff0000ff</color>\n'; // Red lines
     kmlContent += '      <width>3</width>\n';
     kmlContent += '    </LineStyle>\n';
     kmlContent += '    <LabelStyle>\n';
-    kmlContent += '      <scale>0.8</scale>\n';
+    kmlContent += '      <color>ff0000ff</color>\n'; // Red text
+    kmlContent += '      <scale>1.0</scale>\n'; // Increased scale for better visibility
     kmlContent += '    </LabelStyle>\n';
+    kmlContent += '    <BalloonStyle>\n';
+    kmlContent += '      <text><![CDATA[<b>$[name]</b>]]></text>\n';
+    kmlContent += '    </BalloonStyle>\n';
     kmlContent += '  </Style>\n';
     
     // Add all line segments inside the folder
@@ -63,8 +67,28 @@ function generateSingleKMLDocument(lineSegments, title) {
             kmlContent += '  <Placemark>\n';
             kmlContent += `    <name>${escapeXML(segment.name)}</name>\n`;
             kmlContent += '    <styleUrl>#lineSegmentStyle</styleUrl>\n';
+            
+            // Add explicit label element to ensure the name is displayed
+            kmlContent += '    <ExtendedData>\n';
+            kmlContent += '      <Data name="label">\n';
+            kmlContent += `        <value>${escapeXML(segment.name)}</value>\n`;
+            kmlContent += '      </Data>\n';
+            kmlContent += '    </ExtendedData>\n';
+            
+            // Set visibility for the segment
+            kmlContent += '    <visibility>1</visibility>\n';
+            
+            // Add LineString geometry
             kmlContent += '    <LineString>\n';
             kmlContent += '      <tessellate>1</tessellate>\n';
+            
+            // Calculate center point for label placement (midpoint of line)
+            const midPoint = calculateMidpoint(segment.coordinates[0], segment.coordinates[1]);
+            
+            // Add explicit label point
+            kmlContent += '      <altitudeMode>clampToGround</altitudeMode>\n';
+            kmlContent += '      <extrude>1</extrude>\n'; // Helps with label visibility
+            
             kmlContent += '      <coordinates>\n';
             kmlContent += `        ${segment.coordinates.map(coord => `${coord.lon},${coord.lat},${coord.alt}`).join(' ')}\n`;
             kmlContent += '      </coordinates>\n';
@@ -78,6 +102,15 @@ function generateSingleKMLDocument(lineSegments, title) {
     kmlContent += '</kml>';
     
     return kmlContent;
+}
+
+// Helper function to calculate midpoint of a line segment
+function calculateMidpoint(point1, point2) {
+    const midLon = (point1.lon + point2.lon) / 2;
+    const midLat = (point1.lat + point2.lat) / 2;
+    const midAlt = (point1.alt + point2.alt) / 2;
+    
+    return { lon: midLon, lat: midLat, alt: midAlt };
 }
 
 // Helper function to escape XML special characters
