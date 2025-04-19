@@ -9,7 +9,7 @@ function generateCSV(lineSegments, kmlData, selectedFolderIds) {
     const segmentsByPolygon = groupSegmentsByPolygon(lineSegments);
     
     // Generate CSV header
-    let csvContent = 'Polygon Name,Direction (degrees),Length (feet),Layer Name\n';
+    let csvContent = 'Polygon Name, Length (feet), Direction (degrees), Layer Name\n';
     
     // Process each polygon's segments
     for (const polygonId in segmentsByPolygon) {
@@ -30,7 +30,7 @@ function generateCSV(lineSegments, kmlData, selectedFolderIds) {
             const folderName = segment.folderInfo ? segment.folderInfo.folderName : "Unknown";
             
             // Add row to CSV
-            csvContent += `"${escapeCSV(segment.originalPolygonName || 'Unknown')}",${bearing.toFixed(2)},${length},"${escapeCSV(folderName)}"\n`;
+            csvContent += `"${escapeCSV(segment.originalPolygonName || 'Unknown')}",${length},${bearing.toFixed(2)},"${escapeCSV(folderName)}"\n`;
         });
     }
     
